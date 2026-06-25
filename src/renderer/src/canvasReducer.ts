@@ -8,7 +8,11 @@ export interface MonitorPosition {
   y: number
   width: number
   height: number
+  refreshRate: number
   transform: number
+  scale: number
+  availableModes: string[]
+  disabled: boolean
 }
 
 interface DragState {
@@ -24,7 +28,10 @@ export interface CanvasState {
   monitors: MonitorPosition[]
   selected: string | null
   drag: DragState | null
+  gdkScale: number
 }
+
+export type MonitorPatch = Partial<Pick<MonitorPosition, 'scale' | 'transform' | 'disabled'>>
 
 export type CanvasAction =
   | { type: 'INIT'; monitors: Monitor[] }
@@ -32,11 +39,28 @@ export type CanvasAction =
   | { type: 'DRAG_START'; name: string; mouseX: number; mouseY: number; scale: number }
   | { type: 'DRAG_MOVE'; mouseX: number; mouseY: number }
   | { type: 'DRAG_END' }
+  | { type: 'SET_MODE'; name: string; mode: string }
+  | { type: 'UPDATE_MONITOR'; name: string; patch: MonitorPatch }
+  | { type: 'SET_GDK_SCALE'; value: number }
 
 export const initialCanvasState: CanvasState = {
   monitors: [],
   selected: null,
-  drag: null
+  drag: null,
+  gdkScale: 1
+}
+
+// Parses hyprctl mode string: "1920x1080@60.00Hz" → { width, height, refreshRate }
+export function parseModeString(
+  mode: string
+): { width: number; height: number; refreshRate: number } | null {
+  const m = mode.match(/^(\d+)x(\d+)@([\d.]+)Hz$/)
+  if (!m) return null
+  return {
+    width: parseInt(m[1], 10),
+    height: parseInt(m[2], 10),
+    refreshRate: parseFloat(m[3])
+  }
 }
 
 function xSnapCandidates(
@@ -105,7 +129,11 @@ function handleInit(state: CanvasState, monitors: Monitor[]): CanvasState {
       y: m.y,
       width: m.width,
       height: m.height,
-      transform: m.transform
+      refreshRate: m.refreshRate,
+      transform: m.transform,
+      scale: m.scale,
+      availableModes: m.availableModes,
+      disabled: false
     })),
     drag: null
   }
@@ -144,6 +172,30 @@ function handleDragMove(state: CanvasState, mouseX: number, mouseY: number): Can
   }
 }
 
+function handleSetMode(state: CanvasState, name: string, mode: string): CanvasState {
+  const parsed = parseModeString(mode)
+  if (!parsed) return state
+  return {
+    ...state,
+    monitors: state.monitors.map((m) =>
+      m.name === name
+        ? { ...m, width: parsed.width, height: parsed.height, refreshRate: parsed.refreshRate }
+        : m
+    )
+  }
+}
+
+function handleUpdateMonitor(
+  state: CanvasState,
+  name: string,
+  patch: MonitorPatch
+): CanvasState {
+  return {
+    ...state,
+    monitors: state.monitors.map((m) => (m.name === name ? { ...m, ...patch } : m))
+  }
+}
+
 export function canvasReducer(state: CanvasState, action: CanvasAction): CanvasState {
   switch (action.type) {
     case 'INIT':
@@ -156,6 +208,12 @@ export function canvasReducer(state: CanvasState, action: CanvasAction): CanvasS
       return handleDragMove(state, action.mouseX, action.mouseY)
     case 'DRAG_END':
       return { ...state, drag: null }
+    case 'SET_MODE':
+      return handleSetMode(state, action.name, action.mode)
+    case 'UPDATE_MONITOR':
+      return handleUpdateMonitor(state, action.name, action.patch)
+    case 'SET_GDK_SCALE':
+      return { ...state, gdkScale: action.value }
     default:
       return state
   }

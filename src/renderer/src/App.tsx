@@ -1,5 +1,6 @@
 import React, { useEffect, useReducer, useState } from 'react'
 import Canvas from './Canvas'
+import MonitorPanel from './MonitorPanel'
 import Sidebar from './Sidebar'
 import { canvasReducer, initialCanvasState } from './canvasReducer'
 import type { Monitor } from './types'
@@ -36,10 +37,17 @@ export default function App(): React.ReactElement {
     )
   }
 
+  const selectedMonitor = state.selected
+    ? state.monitors.find((m) => m.name === state.selected) ?? null
+    : null
+
   return (
     <div style={{ display: 'flex', height: '100vh', background: '#0f172a' }}>
       <Sidebar monitors={state.monitors} selected={state.selected} dispatch={dispatch} />
       <Canvas state={state} dispatch={dispatch} />
+      {selectedMonitor && (
+        <MonitorPanel monitor={selectedMonitor} gdkScale={state.gdkScale} dispatch={dispatch} />
+      )}
     </div>
   )
 }
