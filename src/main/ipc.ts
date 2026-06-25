@@ -22,11 +22,15 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('hyprctl:monitors', async () => {
-    const { stdout } = await execFileAsync('hyprctl', ['monitors', '-j'])
+    const { stdout } = await execFileAsync('hyprctl', ['monitors', '-j']).catch((err) => {
+      throw new Error(`hyprctl monitors failed: ${(err as Error).message}`)
+    })
     return stdout
   })
 
   ipcMain.handle('hyprctl:reload', async () => {
-    await execFileAsync('hyprctl', ['reload'])
+    await execFileAsync('hyprctl', ['reload']).catch((err) => {
+      throw new Error(`hyprctl reload failed: ${(err as Error).message}`)
+    })
   })
 }
