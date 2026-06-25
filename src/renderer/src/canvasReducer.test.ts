@@ -3,6 +3,7 @@ import {
   applySnap,
   canvasReducer,
   initialCanvasState,
+  parseModeString,
   SNAP_THRESHOLD
 } from './canvasReducer'
 import type { CanvasState, MonitorPosition } from './canvasReducer'
@@ -16,7 +17,7 @@ const monA: Monitor = {
   y: 0,
   scale: 1,
   refreshRate: 60,
-  availableModes: [],
+  availableModes: ['200x100@60.00Hz', '200x100@30.00Hz'],
   transform: 0
 }
 
@@ -28,7 +29,7 @@ const monB: Monitor = {
   y: 0,
   scale: 1,
   refreshRate: 60,
-  availableModes: [],
+  availableModes: ['200x100@60.00Hz'],
   transform: 0
 }
 
@@ -185,9 +186,102 @@ describe('DRAG_END', () => {
   })
 })
 
+describe('parseModeString', () => {
+  it('parses standard mode string', () => {
+    expect(parseModeString('1920x1080@60.00Hz')).toEqual({ width: 1920, height: 1080, refreshRate: 60 })
+  })
+
+  it('parses high-refresh mode', () => {
+    expect(parseModeString('3440x1440@143.97Hz')).toEqual({ width: 3440, height: 1440, refreshRate: 143.97 })
+  })
+
+  it('returns null for invalid format', () => {
+    expect(parseModeString('invalid')).toBeNull()
+    expect(parseModeString('1920x1080@60')).toBeNull()
+  })
+})
+
+describe('SET_MODE', () => {
+  it('updates width, height, refreshRate from mode string', () => {
+    const s0 = canvasReducer(initialCanvasState, {
+      type: 'INIT',
+      monitors: [{ ...monA, availableModes: ['200x100@60.00Hz', '100x50@30.00Hz'] }]
+    })
+    const s1 = canvasReducer(s0, { type: 'SET_MODE', name: 'eDP-1', mode: '100x50@30.00Hz' })
+    const m = s1.monitors.find((m) => m.name === 'eDP-1')!
+    expect(m.width).toBe(100)
+    expect(m.height).toBe(50)
+    expect(m.refreshRate).toBe(30)
+  })
+
+  it('is a no-op for invalid mode string', () => {
+    const s0 = canvasReducer(initialCanvasState, { type: 'INIT', monitors: [monA] })
+    const s1 = canvasReducer(s0, { type: 'SET_MODE', name: 'eDP-1', mode: 'bad' })
+    expect(s1).toBe(s0)
+  })
+})
+
+describe('UPDATE_MONITOR', () => {
+  it('updates scale', () => {
+    const s0 = canvasReducer(initialCanvasState, { type: 'INIT', monitors: [monA] })
+    const s1 = canvasReducer(s0, { type: 'UPDATE_MONITOR', name: 'eDP-1', patch: { scale: 1.5 } })
+    expect(s1.monitors[0].scale).toBe(1.5)
+  })
+
+  it('updates transform', () => {
+    const s0 = canvasReducer(initialCanvasState, { type: 'INIT', monitors: [monA] })
+    const s1 = canvasReducer(s0, { type: 'UPDATE_MONITOR', name: 'eDP-1', patch: { transform: 1 } })
+    expect(s1.monitors[0].transform).toBe(1)
+  })
+
+  it('disables a monitor', () => {
+    const s0 = canvasReducer(initialCanvasState, { type: 'INIT', monitors: [monA] })
+    const s1 = canvasReducer(s0, { type: 'UPDATE_MONITOR', name: 'eDP-1', patch: { disabled: true } })
+    expect(s1.monitors[0].disabled).toBe(true)
+  })
+
+  it('re-enables a disabled monitor', () => {
+    const s0 = canvasReducer(initialCanvasState, { type: 'INIT', monitors: [monA] })
+    const s1 = canvasReducer(s0, { type: 'UPDATE_MONITOR', name: 'eDP-1', patch: { disabled: true } })
+    const s2 = canvasReducer(s1, { type: 'UPDATE_MONITOR', name: 'eDP-1', patch: { disabled: false } })
+    expect(s2.monitors[0].disabled).toBe(false)
+  })
+
+  it('does not affect other monitors', () => {
+    const s0 = canvasReducer(initialCanvasState, { type: 'INIT', monitors: [monA, monB] })
+    const s1 = canvasReducer(s0, { type: 'UPDATE_MONITOR', name: 'eDP-1', patch: { scale: 2 } })
+    expect(s1.monitors.find((m) => m.name === 'HDMI-A-1')!.scale).toBe(1)
+  })
+})
+
+describe('SET_GDK_SCALE', () => {
+  it('updates gdkScale', () => {
+    const s0 = canvasReducer(initialCanvasState, { type: 'INIT', monitors: [monA] })
+    const s1 = canvasReducer(s0, { type: 'SET_GDK_SCALE', value: 1.75 })
+    expect(s1.gdkScale).toBe(1.75)
+  })
+})
+
+describe('INIT', () => {
+  it('seeds disabled=false for all monitors', () => {
+    const s = canvasReducer(initialCanvasState, { type: 'INIT', monitors: [monA] })
+    expect(s.monitors[0].disabled).toBe(false)
+  })
+
+  it('seeds scale and refreshRate from Monitor', () => {
+    const s = canvasReducer(initialCanvasState, {
+      type: 'INIT',
+      monitors: [{ ...monA, scale: 1.5, refreshRate: 144 }]
+    })
+    expect(s.monitors[0].scale).toBe(1.5)
+    expect(s.monitors[0].refreshRate).toBe(144)
+  })
+})
+
 describe('applySnap', () => {
-  const posA: MonitorPosition = { name: 'A', x: 0, y: 0, width: 200, height: 100, transform: 0 }
-  const posB: MonitorPosition = { name: 'B', x: 300, y: 0, width: 200, height: 100, transform: 0 }
+  const base = { refreshRate: 60, transform: 0, scale: 1, availableModes: [], disabled: false }
+  const posA: MonitorPosition = { name: 'A', x: 0, y: 0, width: 200, height: 100, ...base }
+  const posB: MonitorPosition = { name: 'B', x: 300, y: 0, width: 200, height: 100, ...base }
 
   it('snaps left edge of dragged to right edge of stationary (within threshold)', () => {
     // B dragged to x=209 — left edge is 9px from A's right edge (200)
