@@ -87,6 +87,7 @@ export default function Canvas({ state, dispatch }: Props): React.ReactElement {
         const top = m.y * scale + offsetY
         const isSelected = state.selected === m.name
         const isDragging = state.drag?.name === m.name
+        const isDisabled = m.disabled
         return (
           <div
             key={m.name}
@@ -102,24 +103,27 @@ export default function Canvas({ state, dispatch }: Props): React.ReactElement {
               width: w,
               height: h,
               boxSizing: 'border-box',
-              border: `2px solid ${isSelected ? '#60a5fa' : '#4b5563'}`,
+              border: `2px solid ${isSelected ? '#60a5fa' : isDisabled ? '#374151' : '#4b5563'}`,
               background: isDragging
                 ? 'rgba(96,165,250,0.25)'
-                : isSelected
-                  ? 'rgba(96,165,250,0.15)'
-                  : 'rgba(75,85,99,0.3)',
+                : isDisabled
+                  ? 'rgba(30,30,40,0.4)'
+                  : isSelected
+                    ? 'rgba(96,165,250,0.15)'
+                    : 'rgba(75,85,99,0.3)',
+              opacity: isDisabled ? 0.45 : 1,
               cursor: 'grab',
               userSelect: 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: 4,
-              transition: isDragging ? 'none' : 'border-color 0.15s, background 0.15s'
+              transition: isDragging ? 'none' : 'border-color 0.15s, background 0.15s, opacity 0.15s'
             }}
           >
             <span
               style={{
-                color: isSelected ? '#93c5fd' : '#9ca3af',
+                color: isSelected ? '#93c5fd' : isDisabled ? '#4b5563' : '#9ca3af',
                 fontSize: Math.max(10, 13 * scale),
                 fontFamily: 'monospace',
                 pointerEvents: 'none',
